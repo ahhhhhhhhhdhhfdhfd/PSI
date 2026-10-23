@@ -1,25 +1,3 @@
-"""Payload emitter: turns the compiled program into a Luraph v15.1 shaped file.
-
-The emitted file has the same shape as a real Luraph v15.1 payload:
-
-    -- This file was protected using Luraph Obfuscator v15.1 [https://lura.ph/]
-
-    return setmetatable({
-    [1]=bit32.bxor, ...            -- library slots
-    a={1,2,4,8,...},               -- power of two table
-    z=[=[LPH<blob>]=],             -- encrypted program
-    u=function(self) ... end,     -- the virtual machine
-    },{}):u()(...);
-
-Everything the deobfuscator knows how to strip is applied:
-
-* flattened control flow (everything is a state machine),
-* encrypted dispatch table (opcode numbers change per build),
-* lazy constant encryption (strings/numbers are decrypted one at a time),
-* an anti tamper trap that scrambles the VM when the environment is patched,
-* optional compression of the program section.
-"""
-
 import os
 import random
 import re
@@ -28,16 +6,6 @@ from . import compiler as C
 from . import encoder as E
 
 HEADER = "-- This file was protected using PSI Obfuscator"
-
-# --------------------------------------------------------------------------
-# names the vm needs at runtime
-# --------------------------------------------------------------------------
-# None of these names appears in the protected file: they live in the
-# encrypted constant section and are decrypted one by one on demand, so the
-# payload does not contain a single `bit32.bxor` / `string.format` / ... that
-# a scanner could look for.
-#
-# The order is fixed - the vm refers to them by index (LIB0 + n).
 
 VM_NAMES = [
     "table.unpack", "table.pack",                      # 0, 1
@@ -89,9 +57,6 @@ META_NAMES = [
 MIN_PAYLOAD_SIZE = 100 * 1024        # 100 KB
 MAX_PAYLOAD_SIZE = 5 * 1024 * 1024   # 5 MB
 
-# the header fields of the payload.  The vm reads them through these
-# placeholders, so the real names are random in every build - a scanner
-# cannot look for `local SEED=` anymore.
 FIELD_TOKENS = {
     "SEED": "@@F0@@", "PLEN": "@@F1@@", "SLEN": "@@F2@@", "CFL": "@@F3@@",
     "PHASH": "@@F4@@", "NCAN": "@@F5@@", "NWIN": "@@F6@@", "STRH": "@@F7@@",
@@ -172,11 +137,6 @@ def minify_lua(src):
         out.append(ch)
         i += 1
     return "".join(out)
-
-
-# --------------------------------------------------------------------------
-# opcode numbering + dispatch tree
-# --------------------------------------------------------------------------
 
 def make_opmap(rng, junk=True):
     """Assign a random number to every opcode (per build)."""
@@ -327,11 +287,6 @@ def build_dispatch(opmap, indent="    "):
         return lines
 
     return "\n".join(gen(items, indent))
-
-
-# --------------------------------------------------------------------------
-# the virtual machine
-# --------------------------------------------------------------------------
 
 VM_BODY = r"""
 local P=self
@@ -1519,17 +1474,6 @@ def build_guard_block(rng):
     every = rng.choice((1024, 2048, 4096, 4096, 8192, 16384))
     return ("if GUARD>=%d then\nGUARD=0\n%s\nGUARDIDX=GUARDIDX+1\nend"
             % (every, "\n".join(checks)))
-
-
-
-# --------------------------------------------------------------------------
-# per build generators
-#
-# Everything below is chosen per build: the crypto primitives, the order of
-# the header fields, the order of the instruction operands and the names of
-# the vm locals.  Two payloads never share the same layout, so a tool that
-# knows how to unpack one build cannot unpack the next one.
-# --------------------------------------------------------------------------
 
 def build_header(meta):
     """The header reads - the field order changes with every build."""
