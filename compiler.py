@@ -1,28 +1,3 @@
-"""Luraph v15.1 style obfuscator - virtual machine compiler.
-
-Compiles a Luau AST (as produced by `core/luauast.py`) into a register based
-bytecode program that the emitted VM (see `emit.py`) interprets.
-
-The instruction set mirrors the ideas the Luraph v15 devirtualizer reverses:
-
-* every operation is a flat opcode in one big array -> the original control
-  flow is flattened into a state machine (no `if`/`while` left in the payload),
-* locals live in "cells" when they are captured, so closures share them by
-  reference (Lua semantics),
-* string / number constants are not stored inside the program; they live in
-  an encrypted string table that is decrypted lazily, one entry at a time
-  (Luraph's `LPH_ENCSTR`),
-* the whole program is encrypted and (optionally) compressed before it is
-  embedded into the payload.
-
-Opcode numbers are assigned per build, so two builds never share the same
-dispatch tree.
-"""
-
-# --------------------------------------------------------------------------
-# opcodes
-# --------------------------------------------------------------------------
-
 OP_MOVE = "MOVE"            # a b        R[a] = R[b]
 OP_CONST = "CONST"          # a b        R[a] = lazy constant #b
 OP_NUM = "NUM"              # a b        R[a] = b
@@ -100,10 +75,7 @@ ALL_OPS = [
 
 WIDTH = 5                   # op, a, b, c, d
 
-
-# --------------------------------------------------------------------------
 # data model
-# --------------------------------------------------------------------------
 
 class Proto(object):
     def __init__(self, index):
@@ -150,10 +122,7 @@ class Program(object):
         self.protos.append(p)
         return p
 
-
-# --------------------------------------------------------------------------
 # compiler
-# --------------------------------------------------------------------------
 
 class FuncInfo(object):
     def __init__(self, node, parent, index):
@@ -191,18 +160,12 @@ class Compiler(object):
         self.cur = None
         self.cur_func = None
         self.loop_used = 0
-
-    # -- utilities -------------------------------------------------------
-
     @staticmethod
     def key_of(localnode):
         loc = localnode.get("location")
         if loc:
             return loc
         return "@" + str(localnode.get("name", "?"))
-
-    # -- analysis --------------------------------------------------------
-
     def body_assigns(self, node, key):
         """True when `node` assigns to the local identified by `key`."""
         if isinstance(node, dict):
@@ -400,7 +363,7 @@ class Compiler(object):
         for k, r in fi.reg.items():
             self.localinfo[k] = {"reg": r, "boxed": k in fi.boxed, "func": fi}
 
-    # -- code generation -------------------------------------------------
+    # code generate
 
     def emit(self, op, a=0, b=0, c=0, d=0):
         code = self.cur.code
@@ -487,8 +450,6 @@ class Compiler(object):
         proto.nregs = self.tmp_max + 4
         for c in fi.children:
             self._gen_all(c)
-
-    # -- statements ------------------------------------------------------
 
     def gen_block(self, block):
         if not isinstance(block, dict):
